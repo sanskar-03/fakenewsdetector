@@ -1,0 +1,72 @@
+{
+  "india": [
+    {
+      "name": "PIB Fact Check",
+      "domain": "factcheck.pib.gov.in",
+      "score": 0.98
+    },
+    {
+      "name": "Alt News",
+      "domain": "altnews.in",
+      "score": 0.92
+    },
+    {
+      "name": "BOOM",
+      "domain": "boomlive.in",
+      "score": 0.92
+    },
+    {
+      "name": "The Quint WebQoof",
+      "domain": "thequint.com",
+      "score": 0.89
+    },
+    {
+      "name": "FACTLY",
+      "domain": "factly.in",
+      "score": 0.89
+    },
+    {
+      "name": "Newschecker",
+      "domain": "newschecker.in",
+      "score": 0.88
+    }
+  ],
+  "international": [
+    {
+      "name": "Reuters",
+      "domain": "reuters.com",
+      "score": 0.97
+    },
+    {
+      "name": "Associated Press",
+      "domain": "apnews.com",
+      "score": 0.96
+    },
+    {
+      "name": "FactCheck.org",
+      "domain": "factcheck.org",
+      "score": 0.96
+    },
+    {
+      "name": "Full Fact",
+      "domain": "fullfact.org",
+      "score": 0.95
+    },
+    {
+      "name": "BBC",
+      "domain": "bbc.com",
+      "score": 0.94
+    },
+    {
+      "name": "Lead Stories",
+      "domain": "leadstories.com",
+      "score": 0.91
+    },
+    {
+      "name": "Snopes",
+      "domain": "snopes.com",
+      "score": 0.9
+    }
+  ],
+  "rule": "Only explicitly listed domains are trusted; other sources are general or unverified according to score."
+}

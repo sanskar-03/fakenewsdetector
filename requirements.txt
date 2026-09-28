@@ -1,0 +1,7 @@
+-r backend/requirements.txt
+reportlab>=4.2,<5
+python-multipart>=0.0.20,<1
+langdetect>=1.0.9,<2
+deep-translator>=1.11,<2
+orjson>=3.10,<4
+slowapi>=0.1.9,<1
