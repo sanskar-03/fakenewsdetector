@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:8000,http://localhost:3000,http://127.0.0.1:8000"
     model_name: str = "MoritzLaurer/deberta-v3-base-zeroshot-v1.1"
     model_max_length: int = 512
-    ollama_url: str = "http://ollama:11434"
+    ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
     ollama_timeout_seconds: float = 18.0
     chroma_path: str = str(BASE_DIR / "data" / "chroma")
