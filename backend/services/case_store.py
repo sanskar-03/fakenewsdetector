@@ -1,46 +1,40 @@
 import json
-import sqlite3
 import threading
 from datetime import datetime, timezone
 from functools import wraps
-from pathlib import Path
+import os
+import psycopg2
+from psycopg2.extras import DictCursor
 
-ROOT = Path(__file__).resolve().parents[2]
-DATA = ROOT / "data"
-DATA.mkdir(parents=True, exist_ok=True)
-DB_PATH = DATA / "aletheia_cases.sqlite3"
+NEON_URL = os.environ.get("DATABASE_URL", "postgresql://neondb_owner:npg_pnt48eLiKMBW@ep-spring-frost-b59xw6nh-pooler.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require")
 LOCK = threading.Lock()
 
-
 def _connect():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
-
+    return psycopg2.connect(NEON_URL, cursor_factory=DictCursor)
 
 def init_db():
     with LOCK:
         conn = _connect()
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS cases (
-                case_id TEXT PRIMARY KEY,
-                created_at TEXT NOT NULL,
-                title TEXT,
-                claim TEXT,
-                verdict TEXT,
-                confidence REAL,
-                evidence_strength TEXT,
-                language TEXT,
-                payload TEXT NOT NULL
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS cases (
+                    case_id TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL,
+                    title TEXT,
+                    claim TEXT,
+                    verdict TEXT,
+                    confidence REAL,
+                    evidence_strength TEXT,
+                    language TEXT,
+                    payload TEXT NOT NULL
+                )
+            """)
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_cases_created "
+                "ON cases(created_at DESC)"
             )
-        """)
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_cases_created "
-            "ON cases(created_at DESC)"
-        )
         conn.commit()
         conn.close()
-
 
 def _extract_case_id(value):
     if not isinstance(value, dict):
@@ -49,7 +43,6 @@ def _extract_case_id(value):
     if isinstance(result, dict):
         return result.get("case_id") or value.get("case_id")
     return value.get("case_id")
-
 
 def save_case(case_id, payload):
     if not case_id:
@@ -64,36 +57,36 @@ def save_case(case_id, payload):
     evidence_strength = result.get("evidence_strength") or payload.get("evidence_strength") or ""
     language = payload.get("language") or result.get("language") or "en"
     payload_json = json.dumps(payload, ensure_ascii=False)
-    init_db()
+    
     with LOCK:
         conn = _connect()
-        conn.execute("""
-            INSERT INTO cases (
-                case_id, created_at, title, claim, verdict,
-                confidence, evidence_strength, language, payload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(case_id) DO UPDATE SET
-                title=excluded.title,
-                claim=excluded.claim,
-                verdict=excluded.verdict,
-                confidence=excluded.confidence,
-                evidence_strength=excluded.evidence_strength,
-                language=excluded.language,
-                payload=excluded.payload
-        """, (
-            str(case_id),
-            datetime.now(timezone.utc).isoformat(),
-            str(title),
-            str(claim)[:10000],
-            str(verdict),
-            float(confidence),
-            str(evidence_strength),
-            str(language),
-            payload_json,
-        ))
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO cases (
+                    case_id, created_at, title, claim, verdict,
+                    confidence, evidence_strength, language, payload
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT(case_id) DO UPDATE SET
+                    title=excluded.title,
+                    claim=excluded.claim,
+                    verdict=excluded.verdict,
+                    confidence=excluded.confidence,
+                    evidence_strength=excluded.evidence_strength,
+                    language=excluded.language,
+                    payload=excluded.payload
+            """, (
+                str(case_id),
+                datetime.now(timezone.utc).isoformat(),
+                str(title),
+                str(claim)[:10000],
+                str(verdict),
+                float(confidence),
+                str(evidence_strength),
+                str(language),
+                payload_json,
+            ))
         conn.commit()
         conn.close()
-
 
 def persist_case_result(func):
     @wraps(func)
@@ -120,11 +113,11 @@ def persist_case_result(func):
     import inspect
     return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
 
-
 def get_case(case_id):
-    init_db()
     conn = _connect()
-    row = conn.execute("SELECT * FROM cases WHERE case_id=?", (case_id,)).fetchone()
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM cases WHERE case_id=%s", (case_id,))
+        row = cur.fetchone()
     conn.close()
     if not row:
         return None
@@ -137,40 +130,41 @@ def get_case(case_id):
         })
     return data
 
-
 def search_cases(limit=50, case_id=None):
-    init_db()
     conn = _connect()
-    if case_id:
-        rows = conn.execute("""
-            SELECT case_id, created_at, title, claim,
-                   verdict, confidence, evidence_strength, language
-            FROM cases
-            WHERE case_id = ?
-            ORDER BY created_at DESC
-            LIMIT ?
-        """, (case_id, limit)).fetchall()
-    else:
-        rows = conn.execute("""
-            SELECT case_id, created_at, title, claim,
-                   verdict, confidence, evidence_strength, language
-            FROM cases
-            ORDER BY created_at DESC
-            LIMIT ?
-        """, (limit,)).fetchall()
+    with conn.cursor() as cur:
+        if case_id:
+            cur.execute("""
+                SELECT case_id, created_at, title, claim,
+                       verdict, confidence, evidence_strength, language
+                FROM cases
+                WHERE case_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (case_id, limit))
+        else:
+            cur.execute("""
+                SELECT case_id, created_at, title, claim,
+                       verdict, confidence, evidence_strength, language
+                FROM cases
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (limit,))
+        rows = cur.fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
-
 def delete_case(case_id):
-    init_db()
     with LOCK:
         conn = _connect()
-        cur = conn.execute("DELETE FROM cases WHERE case_id=?", (case_id,))
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM cases WHERE case_id=%s", (case_id,))
+            deleted = cur.rowcount > 0
         conn.commit()
-        deleted = cur.rowcount > 0
         conn.close()
     return deleted
 
-
-init_db()
+try:
+    init_db()
+except Exception as e:
+    print(f"Warning: Could not initialize Neon Postgres DB: {e}")
